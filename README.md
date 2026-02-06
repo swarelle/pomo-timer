@@ -1,5 +1,5 @@
 # pomo-timer
-A simple macOS app to ~~force~~ help you take breaks. Built on macOS Tahoe 26.2.
+A simple macOS app to ~~force~~ help you take breaks. Vibe-coded for macOS Tahoe 26.2.
 
 To use, download `PomoTimer.app/`. Make sure the app is allowed through any Do Not Disturb modes in System Settings. 
 
