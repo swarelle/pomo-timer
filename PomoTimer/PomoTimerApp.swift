@@ -21,11 +21,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     
     var statusItem: NSStatusItem?
     var timer: Timer?
-    var remainingSeconds = 0
+    var endTime: Date?  // Track when timer should end
     var totalSeconds = 25 * 60
     var hasNotifiedFiveMinutes = false
     var hasNotifiedOneMinute = false
     var notificationSound = "Glass"
+    
+    // Computed property to get current remaining seconds
+    private var remainingSeconds: Int {
+        guard let endTime = endTime else { return 0 }
+        return max(0, Int(endTime.timeIntervalSince(Date())))
+    }
     
     let availableSounds = ["Default", "Glass", "Basso", "Blow", "Bottle", "Frog",
                            "Funk", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi",
@@ -222,6 +228,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     @objc func startTimer() {
         guard let menu = statusItem?.menu else { return }
         
+        // Prevent multiple timers from running
+        timer?.invalidate()
+        timer = nil
+        
         let modeControl = menu.items.first(where: { $0.view?.viewWithTag(300) != nil })?.view?.viewWithTag(300) as? NSSegmentedControl
         let isDuration = (modeControl?.selectedSegment == 0)
         
@@ -245,15 +255,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             totalSeconds = seconds
         }
         
-        remainingSeconds = totalSeconds
+        // Set end time based on current time + duration
+        endTime = Date().addingTimeInterval(TimeInterval(totalSeconds))
         hasNotifiedFiveMinutes = false
         hasNotifiedOneMinute = false
         menu.item(withTag: 101)?.isHidden = true
         menu.item(withTag: 102)?.isHidden = false
         
+        // Create timer - it will check actual time remaining each tick
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        timer?.tolerance = 0.1
+        
         updateDisplay()
     }
     
@@ -275,7 +289,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     @objc func stopTimer() {
         timer?.invalidate()
         timer = nil
-        remainingSeconds = 0
+        endTime = nil
         
         guard let menu = statusItem?.menu else { return }
         menu.item(withTag: 101)?.isHidden = false
@@ -285,21 +299,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     func tick() {
-        remainingSeconds -= 1
+        guard timer != nil, endTime != nil else { return }
         
-        if remainingSeconds == 300 && !hasNotifiedFiveMinutes {
+        // Get actual remaining seconds from computed property
+        let remaining = remainingSeconds
+        
+        // Check for notifications at specific thresholds
+        if remaining <= 300 && remaining > 299 && !hasNotifiedFiveMinutes {
             notify(title: "5 Minutes Left", body: "Your Pomodoro session is almost done!")
             hasNotifiedFiveMinutes = true
         }
         
-        if remainingSeconds == 60 && !hasNotifiedOneMinute {
+        if remaining <= 60 && remaining > 59 && !hasNotifiedOneMinute {
             notify(title: "1 Minute Left", body: "Wrapping up your Pomodoro session!")
             hasNotifiedOneMinute = true
         }
         
-        if remainingSeconds <= 0 {
+        // Check if timer is complete
+        if remaining <= 0 {
             timer?.invalidate()
             timer = nil
+            endTime = nil
             stopTimer()
             notify(title: "Pomodoro Complete!", body: "Great work! Time for a break.")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -312,8 +332,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     private func updateDisplay() {
-        let m = remainingSeconds / 60
-        let s = remainingSeconds % 60
+        let remaining = remainingSeconds
+        let m = remaining / 60
+        let s = remaining % 60
         let time = String(format: "%d:%02d", m, s)
         statusItem?.button?.title = "🍅 \(time)"
         statusItem?.menu?.item(withTag: 100)?.title = "Time remaining: \(time)"
